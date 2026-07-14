@@ -1,37 +1,37 @@
-import { Groq } from 'groq-sdk';
+// Local testing ke liye sendMessage function (Vercel Backend ke baghair direct Groq call)
+async function sendMessage() {
+    const input = document.getElementById('user-input');
+    const message = input.value.trim();
+    if (!message || !currentUser) return;
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
-
-    if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
-    }
-
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+    chatHistory.push({ role: 'user', content: message });
+    renderChat();
+    input.value = '';
 
     try {
-        const { message, chatHistory } = req.body;
+        await saveChatToFirebase();
 
-        const systemPrompt = {
-            role: "system",
-            content: "You are an expert academic tutor for Pakistani Education Boards (Punjab PTB, Sindh Board, KPK Board, Balochistan, Federal Board). Explain concepts simply, step-by-step, using Urdu/Roman-Urdu and English. Focus on helping students solve textbook questions."
-        };
-
-        const response = await groq.chat.completions.create({
-            messages: [systemPrompt, ...chatHistory, { role: "user", content: message }],
-            model: "llama3-8b-8192",
+        // Direct Groq API Call (Sirf check karne ke liye)
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer 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' // <-- Apni poori Key yahan paste karein
+            },
+            body: JSON.stringify({ 
+                model: "mixtral-8x7b-32768", // Ya jo bhi model aap use kar rahe hain
+                messages: chatHistory 
+            })
         });
-
-        return res.status(200).json({ reply: response.choices[0].message.content });
-    } catch (error) {
-        return res.status(500).json({ error: error.message });
+        
+        const data = await response.json();
+        const reply = data.choices[0].message.content;
+        
+        chatHistory.push({ role: 'assistant', content: reply });
+        renderChat();
+        await saveChatToFirebase();
+    } catch (err) {
+        console.error("Direct Groq Fetch error:", err);
+        alert("AI Reply Error: " + err.message);
     }
 }
